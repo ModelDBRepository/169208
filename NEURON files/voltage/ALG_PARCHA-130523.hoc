@@ -1,0 +1,255 @@
+// ------------------------
+// General notes and instructions
+// ------------------------
+
+// Loads algorithm for changing a parameter of the neuron
+//  and writing the new parameter value into a .dat file 
+//  if one is open.
+// A base neuron must be loaded first.
+// Loads with the xopen command:
+//  xopen("ALG_PARCHA-130523.hoc")
+// If the changing parameter value is to be recorded into
+//  a .dat file, the .dat file should be opened at some
+//  time before executing the PARCHA algorithm.
+// Run this algorithm with PARCHA command:
+//  PARCHA(parameter name, parameter value)
+// E.g. PARCHA(mye_gap, 0.001) changes submyelin gap to
+//  0.001µm then it writes the new parameter value 
+//  (followed by a comma and space) into the opened .dat
+//  file.
+// Note that when you change a parameter value, if there
+//  are other parameters that are dependent, those will be
+//  changed as well.  To see which parameters are affected,
+//  read ALG_PARCHA-1530523.pdf or this code.
+
+// ------------------------
+// Update notes
+// ------------------------
+
+// This file replaces the older ALG_PARCHA-130308.hoc
+// In this version:
+//  The layout and organization has been improved.
+//  Whenever a segment length is changed, nseg is also
+//   changed accordingly as function of length. We made
+//   the function simplier to read.
+
+// ------------------------
+// List of possible parameter names
+// (on the left hand side of the equations).
+// ------------------------
+
+all_axondiam = 1
+all_rhoa = 11
+node_L = 7
+node_nsegs = 8
+node_gnabar = 12
+node_gkbar = 13
+node_xraxial = 14
+node_xg = 15
+node_xc = 16
+mye_gap = 2
+mye_rhoo = 3
+mye_nl = 4
+mye_mygm = 5
+mye_mycm = 6
+mye_L = 9
+mye_nsegs = 10
+mye_gnabar = 17
+mye_gkbar = 18
+
+// ------------------------
+// The PARCHA algorithm
+// ------------------------
+
+   proc PARCHA () {
+      fprint ("%.10g, ", $2)
+      print $2
+      varcha = $1
+      fillrest = 0
+      if (varcha == 1) {
+         axondiam = $2
+         node[0].diam = axondiam
+         para[0].diam = axondiam
+         mye[0].diam = axondiam
+         varcha = 3.1
+         fillrest = 3
+      }
+      if (varcha == 2) {
+         gap = $2
+         varcha = 3.1
+         fillrest = 2
+      }
+      if (varcha == 3) {
+         rhoo = $2
+         varcha = 3.1
+         fillrest = 2
+      }
+      if (varcha == 3.1) {
+         Rnumber = (rhoo*0.01)/(PI*((((axondiam/2)+gap)^2)-((axondiam/2)^2)))
+         varcha = 3.2
+      }
+      if (varcha == 3.2) {
+         para[0].xraxial = Rnumber
+         mye[0].xraxial = Rnumber
+      }
+      if (varcha == 4) {
+         nl = $2
+         varcha = 6.1
+      }
+      if (varcha == 5) {
+         mygm = $2
+         varcha = 6.1
+      }
+      if (varcha == 6) {
+         mycm = $2
+         varcha = 6.1
+      }
+      if (varcha == 6.1) {
+         para[0].xg = mygm/(nl*2)
+         para[0].xc = mycm/(nl*2)
+         mye[0].xg = mygm/(nl*2)
+         mye[0].xc = mycm/(nl*2)
+         fillrest = 2
+      }
+      if (varcha == 7) {
+         node[0].L = $2
+         newL = $2
+         Li = 10
+         ni = 1
+         Lf = 1500
+         nf = 1/3
+         eps = 0.00001
+         K = log(ni-nf+eps)/log(eps)
+         newnseg = eps^((newL*(K-1)-K*Lf+Li)/(Li-Lf))+nf-eps
+         newnseg = newnseg*newL
+         newnseg = int(newnseg)
+         varcha = 8.1
+      }
+      if (varcha == 8) {
+         newnseg = $2
+         varcha = 8.1
+      }
+      if (varcha == 8.1) {
+         aa = (-1)^newnseg
+         if (aa == 1) {
+            newnseg = newnseg+1
+         }
+         node[0].nseg = newnseg
+         fillrest = 1
+      }
+      if (varcha == 9) {
+         mye[0].L = $2
+         newL = $2
+         Li = 10
+         ni = 1
+         Lf = 1500
+         nf = 1/3
+         eps = 0.00001
+         K = log(ni-nf+eps)/log(eps)
+         newnseg = eps^((newL*(K-1)-K*Lf+Li)/(Li-Lf))+nf-eps
+         newnseg = newnseg*newL
+         newnseg = int(newnseg)
+         varcha = 10.1
+      }
+      if (varcha == 10) {
+         newnseg = $2
+         varcha = 10.1
+      }
+      if (varcha == 10.1) {
+         aa = (-1)^newnseg
+         if (aa == 1) {
+            newnseg = newnseg+1
+         }
+         mye[0].nseg = newnseg
+         fillrest = 2
+      }
+      if (varcha == 11) {
+         rhoa = $2
+         node[0].Ra = rhoa*0.0001
+         para[0].Ra = rhoa*0.0001
+         mye[0].Ra = rhoa*0.0001
+         fillrest = 3
+      }
+      if (varcha == 12) {
+         node[0].gnabar_hh = $2
+         fillrest = 1
+      }
+      if (varcha == 13) {
+         node[0].gkbar_hh = $2
+         fillrest = 1
+      }
+      if (varcha == 14) {
+         node[0].xraxial = $2
+         fillrest = 1
+      }
+      if (varcha == 15) {
+         node[0].xg = $2
+         fillrest = 1
+      }
+      if (varcha == 16) {
+         node[0].xc = $2
+         fillrest = 1
+      }
+      if (varcha == 17) {
+         para[0].gnabar_hh = $2
+         mye[0].gnabar_hh = $2
+         fillrest = 2
+      }
+      if (varcha == 18) {
+         para[0].gkbar_hh = $2
+         mye[0].gkbar_hh = $2
+         fillrest = 2
+      }
+      if (fillrest == 1 || fillrest == 3) {
+         for i = 1, segs {
+            node[i] {
+               L = node[0].L
+               diam = node[0].diam
+               Ra = node[0].Ra
+               nseg = node[0].nseg
+               gnabar_hh = node[0].gnabar_hh
+               gkbar_hh = node[0].gkbar_hh
+               xraxial = node[0].xraxial
+               xg = node[0].xg
+               xc = node[0].xc
+            }
+         }
+      }
+      if (fillrest == 2 || fillrest == 3) {
+         for i = 1, (segs-1) {
+            para[2*i] {
+               L = para[0].L
+               diam = para[0].diam
+               Ra = para[0].Ra
+               nseg = para[0].nseg
+               gnabar_hh = para[0].gnabar_hh
+               gkbar_hh = para[0].gkbar_hh
+               xraxial = para[0].xraxial
+               xg = para[0].xg
+               xc = para[0].xc
+            }
+            mye[i] {
+               L = mye[0].L
+               diam = mye[0].diam
+               Ra = mye[0].Ra
+               nseg = mye[0].nseg
+               gnabar_hh = mye[0].gnabar_hh
+               gkbar_hh = mye[0].gkbar_hh
+               xraxial = mye[0].xraxial
+               xg = mye[0].xg
+               xc = mye[0].xc
+            }
+            para[2*i+1] {
+               L = para[0].L
+               diam = para[0].diam
+               Ra = para[0].Ra
+               nseg = para[0].nseg
+               gnabar_hh = para[0].gnabar_hh
+               gkbar_hh = para[0].gkbar_hh
+               xraxial = para[0].xraxial
+               xg = para[0].xg
+               xc = para[0].xc
+            }
+         }
+      }
+   }

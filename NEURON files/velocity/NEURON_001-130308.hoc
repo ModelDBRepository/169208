@@ -1,0 +1,127 @@
+// NEURON 001
+
+// ------------------------
+// General notes and instructions
+// ------------------------
+
+// Loads the base neuron and sets its parameters
+// Loads with the xopen command:
+//  xopen("NEURON_001-130308.hoc")
+// A base neuron such as this should be loaded first
+// Some variable names differ from those mentioned in
+//  Young, Castelfranco, Hartline (2013).
+//  'mye' refers to the "myelinated" segments, i.e. the
+//  internodes.
+//  'gap' refers to the thickness of the submyelin space,
+//  i.e. the submyelin gap, or delta.
+//  'mycm' is the radial capacitance of a single layer
+//  of "myelin"
+//  'mygm' is the radial conductance of a single layer
+//  of "myelin"
+
+// ------------------------
+// Base neuron setup
+// ------------------------
+
+   segs = 100
+   create node[segs+1]
+   create para[2*segs]
+   create mye[segs]
+
+   rhoa = 0.356e6
+   rhoo = 0.356e6
+   axondiam = 10
+   gap = 0.07
+   Rnumber = (rhoo*0.01)/(PI*((((axondiam/2)+gap)^2)-((axondiam/2)^2)))
+   nl = 100
+   mycm = 1.0
+   mygm = 0.000001
+   for i = 0, (segs-1) {
+      node[i] {
+         L = 10
+         diam = axondiam
+         Ra = rhoa*0.0001
+         cm = 1
+         nseg = 9
+         insert hh
+         gnabar_hh = 0.12
+         gkbar_hh = 0.036
+         gl_hh = 0.0003
+         el_hh = -54.4
+         insert extracellular
+         xraxial = 0.0001
+         xg = 1e10
+         xc = 0
+      }
+      para[2*i] {
+         L = 1
+         diam = axondiam
+         Ra = rhoa*0.0001
+         cm = 1
+         nseg = 3
+         insert hh
+         gnabar_hh = 0.12
+         gkbar_hh = 0.036
+         gl_hh = 0.0003
+         el_hh = -54.4
+         insert extracellular
+         xraxial = Rnumber
+         xg = mygm/(nl*2)
+         xc = mycm/(nl*2)
+      }
+      mye[i] {
+         L = 1500
+         diam = axondiam
+         Ra = rhoa*0.0001
+         cm = 1
+         nseg = 301
+         insert hh
+         gnabar_hh = 0.12
+         gkbar_hh = 0.036
+         gl_hh = 0.0003
+         el_hh = -54.4
+         insert extracellular
+         xraxial = Rnumber
+         xg = mygm/(nl*2)
+         xc = mycm/(nl*2)
+      }
+      para[2*i+1] {
+         L = para[2*i].L
+         diam = para[2*i].diam
+         Ra = para[2*i].Ra
+         cm = para[2*i].cm
+         nseg = para[2*i].nseg
+         insert hh
+         gnabar_hh = para[2*i].gnabar_hh
+         gkbar_hh = para[2*i].gkbar_hh
+         gl_hh = para[2*i].gl_hh
+         el_hh = para[2*i].el_hh
+         insert extracellular
+         xraxial = para[2*i].xraxial
+         xg = para[2*i].xg
+         xc = para[2*i].xc
+      }
+      connect para[2*i](0), node[i](1)
+      connect mye[i](0), para[2*i](1)
+      connect para[2*i+1](0), mye[i](1)
+   }
+   for i = 1, (segs-1) {
+      connect node[i](0), para[2*i-1](1)
+   }
+   node[segs] {
+      L = node[0].L
+      diam = node[0].diam
+      Ra = node[0].Ra
+      cm = node[0].cm
+      nseg = node[0].nseg
+      insert hh
+      gnabar_hh = node[0].gnabar_hh
+      gkbar_hh = node[0].gkbar_hh
+      gl_hh = node[0].gl_hh
+      el_hh = node[0].el_hh
+      insert extracellular
+      xraxial = node[0].xraxial
+      xg = node[0].xg
+      xc = node[0].xc
+   }
+   connect node[segs](0), para[2*segs-1](1)

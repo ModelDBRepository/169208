@@ -1,0 +1,136 @@
+// ------------------------
+// General notes and instructions
+// ------------------------
+
+// Loads algorithm determining the conduction velocity of
+//  the neuron
+// A base neuron must be loaded first.
+// Loads with the xopen command:
+//  xopen("ALG_VELOCITY-130308.hoc")
+// If the velocity is to be recorded into a .dat file,
+//  the .dat file should be opened at some time before
+//  executing the VELOCITY algorithm.
+// Run this algorithm with the gogo command:
+//  gogo(first recording node, last recording node)
+// E.g. gogo(40, 50) applies a current clamp at the
+//  center of the node[0]. Then it monitors the center
+//  of the 40th and 50th node.  When the positions "fire,"
+//  the conduction velocity is calculated. This number is
+//  then printed into the open .dat file (followed by a
+//  semicolon and a line break).  A position "fires" when
+//  the voltage at that position rises past V=thresh.
+
+
+// ------------------------
+// Stimulus and thresh setup
+// ------------------------
+
+   objref stim
+   node[0] stim = new IClamp(0.5)
+   stim.amp = 100
+   stim.dur = 1
+   load_file("nrngui.hoc")
+
+   thresh = -35.0
+   dt = 0.0125
+   setdt()
+   tstop = 100
+   steps = tstop/dt
+
+// ------------------------
+// The VELOCITY algorithm
+// ------------------------
+
+// This algorithm may seem more complicated than expected.
+// The complexity is due to flow control.  In particular,
+//  the algorithm tries to answer the following questions.
+// 1)  Have both nodes fired? (see 2A and 2B)
+// 2A) If yes, then calculate the conduction velocity.
+// 2B) If no, then why not? (see 3A and 3B)
+// 3A) If conduction is slow and more time is need, then
+//  continue.
+// 3B) If conduction has failed, then quit.
+
+   double voltA[2], voltB[2], timeA[2], timeB[2]
+
+// $1=firstnode $2=lastnode
+
+   proc gogo() {
+      finitialize(-65)
+      switchA = 1
+      switchB = 1
+      apcounter = 0
+      aptimerP2 = 0
+      retrycount = 0
+      for gogoi = 1, steps {
+         nAvA = node[$1].v(0.5)
+         nBvA = node[$2].v(0.5)
+         tLAST = t
+         fadvance()
+         nAvB = node[$1].v(0.5)
+         nBvB = node[$2].v(0.5)
+         if (apcounter <= $2) {
+            apcounterv = node[apcounter].v(0.5)
+            if (apcounterv > thresh) {
+               apcounter = apcounter+1
+               aptimerP1 = aptimerP2
+               aptimerP2 = t
+            }
+         }
+         if (switchA == 1) {
+            if (nAvB > thresh) {
+               if (nAvA <= thresh) {
+                  voltA[0] = nAvA
+                  voltA[1] = nAvB
+                  timeA[0] = tLAST
+                  timeA[1] = t
+                  switchA = 0
+               }
+            }
+         }
+         if (switchB == 1) {
+            if (nBvB > thresh) {
+               if (nBvA <= thresh) {
+                  voltB[0] = nBvA
+                  voltB[1] = nBvB
+                  timeB[0] = tLAST
+                  timeB[1] = t
+                  switchB = 0
+               }
+            }
+         }
+         stopper = switchA+switchB
+         if (apcounter >= $1) {
+            gogoi = steps-1
+         }
+         if (gogoi == steps) {
+            if (stopper > 0) {
+               aptimerN = aptimerP2+2*(aptimerP2-aptimerP1)
+               if (t <= aptimerN) {
+                  retrycount = retrycount+1
+                  gogoi = 0.5*steps
+                  print "time = ", t, "   AP position ", apcounter
+                  print "retry attempt ", retrycount
+               }
+               if (t > aptimerN) {
+                  print "time = ", t, "   AP position ", apcounter
+                  print "retry attempts failed"
+                  print "decrease thresh, increase tstop, or increase stim.amp"
+                  vel = 0
+                  fprint ("%.10g;\n", vel)
+                  print "conduction failure"
+                  return
+               }
+            }
+         }
+         if (stopper == 0) {
+            gogoi = steps
+         }
+      }
+      timA = ((timeA[1]-timeA[0])*(thresh-voltA[0]))/(voltA[1]-voltA[0])+timeA[0]
+      timB = ((timeB[1]-timeB[0])*(thresh-voltB[0]))/(voltB[1]-voltB[0])+timeB[0]
+      dist = ($2-$1)*(node[0].L+2*para[0].L+mye[0].L)
+      vel = dist/(timB-timA)/1000
+      fprint ("%.10g;\n", vel)
+      print vel, "meters per second"
+   }

@@ -1,0 +1,58 @@
+// Load base neuron, algorithms
+
+xopen("NEURON_001-130308.hoc")
+xopen("ALG_PARCHA-130523.hoc")
+xopen("ALG_EXTVOLTAGE-150108.hoc")
+
+strdef basename
+
+// ----- START EDITS (1 of 2) -----
+
+// Give the base name for the .dat file for the data
+// The file will be named basename_###.dat where ### is 
+//  some number
+
+basename = "EXTVOLTAGE-150108_gap"
+
+// ----- END EDITS (1 of 2) -----
+
+objref PAR1
+PAR1 = new Vector()
+
+// ----- START EDITS (2 of 2) -----
+
+// State the varying parameter and its values
+// See the ALG_PARCHA algorithm for list of
+//  possible parameters
+
+PAR1name = mye_gap
+PAR1.append(0.01, 10.0)
+
+// ----- END EDITS (2 of 2) -----
+
+PARSIZE1 = PAR1.size()
+RUNTOTAL = PARSIZE1
+RUNCOUNTER = 0
+
+strdef FILEformat, FILEext, FILEname
+FILEext = "dat"
+MAXINDEXES = 1
+i = 10
+while (RUNTOTAL >= i) {
+   MAXINDEXES = MAXINDEXES+1
+   i = 10^(MAXINDEXES)
+}
+sprint(FILEformat, "%s%d%s", "%s_%0", MAXINDEXES, "d.%s")
+
+for PAR1index = 0, (PARSIZE1-1) {
+   PAR1value = PAR1.x[PAR1index]
+   PARCHA(PAR1name, PAR1value)
+   sprint(FILEname, FILEformat, basename, RUNCOUNTER+1, FILEext)
+   wopen(FILEname)
+   gogo(40, 50, 3, 1, 10)
+   wopen()
+   RUNCOUNTER = RUNCOUNTER+1
+   print RUNCOUNTER, "of ", RUNTOTAL, "done"
+}
+
+print "really done!"

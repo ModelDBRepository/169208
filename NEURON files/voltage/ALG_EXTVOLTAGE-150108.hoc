@@ -1,0 +1,433 @@
+// ------------------------
+// General notes and instructions
+// ------------------------
+
+// Loads the algorithms for recording trans-fiber
+//  voltages at a specified region of the neuron.  Note 
+//  this is nearly identical to the ALG_INTVOLTAGE files, 
+//  which records trans-axolemmal voltages instead.
+// Loads with the xopen command:
+//  xopen("ALG_EXTVOLTAGE-150108.hoc")
+// A .dat file must also be opened before executing this 
+//  algorithm.
+// Run this algorithm with the gogo command:
+//  gogo(first recording node, last recording node) or
+//  gogo(first recording node, last recording node, 
+//  number of divisions in nodes, 
+//  number of divisions in paranodes, 
+//  number of divisions in internodes)
+// The first two inputs are written as firstnode and 
+//  lastnode in this code, and the last three are nodediv, 
+//  paradiv, and interdiv.  The first two inputs give the 
+//  bounds of the monitored region.  I.e. the voltages 
+//  between node[firstnode].(0.5) and node[lastnode].(0.5) 
+//  are recorded.  Roughly speaking, the last three give 
+//  the resolution of the points between the bounds.  
+//  Details can be found in the succeeding sections.
+// The output, written into an opened .dat file, will be a 
+//  matrix.  The first element is a 0.  The remaining 
+//  elements of the first row are the positions monitored. 
+//   The remaining elements of the first column are the 
+//  times of recording.  Finally the remaining elements 
+//  are voltages at respective positions and times.  I.e.
+//   0 P O S I T I O N S
+//   T  V O L T A G E S
+//   I  V O L T A G E S
+//   M  V O L T A G E S
+//   E  V O L T A G E S
+//   S  V O L T A G E S
+
+// ------------------------
+// Stimulus and thresh setup
+// ------------------------
+
+   objref stim
+   node[0] stim = new IClamp(0.5)
+   stim.amp = 100
+   stim.dur = 1
+   load_file("nrngui.hoc")
+
+   thresh = 0
+   dt = 0.0125
+   setdt()
+   tstop = 100
+   steps = tstop/dt
+
+// ------------------------
+// Setting up the vectors with VECTORSETUP
+// ------------------------
+
+// The vectorsetup procedure, sets up the four vectors 
+//  that we need: positions, voltages, extvoltages, and 
+//  doneyet.  It needs two or five input to run, i.e. 
+//  vectorsetup(firstnode, lastnode) or vectorsetup
+//  (firstnode, lastnode, nodediv, paradiv, interdiv).
+// The positions vector holds the locations of all the 
+//  positions that have voltage monitoring.  The first and 
+//  last positions are at the centers of node[firstnode] 
+//  and node[lastnode], respectively.  The positions 
+//  between these ends are determined by the nodediv, 
+//  paradiv, and interdiv values.  If the preceding three 
+//  variables are not defined, they are taken to be node
+//  [0].nseg, para[0].nseg, and inter[0].nseg, 
+//  respectively.  Roughly speaking, each nodal, 
+//  paranodal, and internodal segment between node
+//  [firstnode] and node[lastnode] is split into nodediv, 
+//  paradiv, and interdiv pieces, respectively, and the 
+//  positions at the "cuts" are monitored.  nodediv, 
+//  paradiv, and interdiv are taken to be even integers to 
+//  ensure that a "cut" falls in the center of each 
+//  segment.  More details are available in the section 
+//  for the positionsin algorithm below.
+// The voltages vector is a vector that holds the trans-
+//  axolemmal voltages at each of the monitored positions 
+//  at a specific time.  It is the same size as the 
+//  positions vector.  More details are available in the 
+//  section for the voltagesin algorithm below.
+// The extvoltages vector is similar to the voltages 
+//  vector, except that trans-fiber voltages are used.
+// The doneyet vector keeps track of whether or not all of 
+//  the monitored positions have experienced an action 
+//  potential.  It is the same size as the positions 
+//  vector.  More details are available in the section for 
+//  the voltagesin algorithm below.
+// At the end of this section, the vectorsetup algorithm 
+//  will run once.  This is necessary, because the 
+//  succeeding algorithms use objects created by the 
+//  vectorsetup algorithm.  If those objects do not exist, 
+//  NEURON will return an error.
+
+   proc vectorsetup() {
+      firstnode = $1
+      lastnode = $2
+      if (numarg() == 2) {
+         nodediv = node[0].nseg
+         paradiv = para[0].nseg
+         interdiv = mye[0].nseg
+      }
+      if (numarg() == 5) {
+         nodediv = $3
+         paradiv = $4
+         interdiv = $5
+      }
+      j = (-1)^(nodediv)
+      if (j == (-1)) {
+         nodediv = nodediv+1
+      }
+      j = (-1)^(paradiv)
+      if (j == (-1)) {
+         paradiv = paradiv+1
+      }
+      j = (-1)^(interdiv)
+      if (j == (-1)) {
+         interdiv = interdiv+1
+      }
+      halfnode = (nodediv/2)
+      divperseg = nodediv+interdiv+2*paradiv-4
+      totaldiv = divperseg*(lastnode-firstnode)+1
+      double positions[totaldiv]
+      double voltages[totaldiv]
+      double extvoltages[totaldiv]
+      double doneyet[totaldiv]
+   }
+
+   vectorsetup(40, 42, 2, 2, 2)
+
+// ------------------------
+// Positions vector
+// ------------------------
+
+// The positionsin and printpositions algorithms store the 
+//  locations of the monitored positions and write them 
+//  into an opened .dat file, respectively.  As previously 
+//  mentioned, the centers of node[firstnode] and node
+//  [lastnode] are the first and last positions, 
+//  respectively, and the remaining intermediate positions 
+//  are determined by even integers nodediv, paradiv, and 
+//  interdiv.  The nodal segments between the endpoints 
+//  are cut into nodediv number of partitions, each of 
+//  length (node[0].L)/(nodediv).  This requires nodediv-1 
+//  cuts per section.  The position with monitored 
+//  voltages are at these cuts.  Note that these cuts 
+//  never occur at the ends that connect with adjacent 
+//  paranodes.  Also note that since nodediv is an even 
+//  integer, the center of each node is always monitored.  
+//  The paranodal and internodal positions are determined 
+//  similarly.
+// It should be noted that the first position is recorded 
+//  as 0 and all other positions are recorded as their 
+//  distances from this point.
+
+   proc positionsin() {
+      nodedivspace = (node[0].L)/(nodediv)
+      interdivspace = (mye[0].L)/(interdiv)
+      paradivspace = (para[0].L)/(paradiv)
+      spacetracker = 0
+      j = 0
+      for i = 1, (lastnode-firstnode) {
+         for ii = halfnode, (nodediv-1) {
+            positions[j] = spacetracker
+            j = j+1
+            spacetracker = spacetracker+nodedivspace
+         }
+         spacetracker = spacetracker+paradivspace
+         for ii = 1, (paradiv-1) {
+            positions[j] = spacetracker
+            j = j+1
+            spacetracker = spacetracker+paradivspace
+         }
+         spacetracker = spacetracker+interdivspace
+         for ii = 1, (interdiv-1) {
+            positions[j] = spacetracker
+            j = j+1
+            spacetracker = spacetracker+interdivspace
+         }
+         spacetracker = spacetracker+paradivspace
+         for ii = 1, (paradiv-1) {
+            positions[j] = spacetracker
+            j = j+1
+            spacetracker = spacetracker+paradivspace
+         }
+         spacetracker = spacetracker+nodedivspace
+         for ii = 1, (halfnode-1) {
+            positions[j] = spacetracker
+            j = j+1
+            spacetracker = spacetracker+nodedivspace
+         }
+      }
+      positions[j] = spacetracker
+   }
+
+   proc printpositions() {
+      for j = 0, (totaldiv-2) {
+         i = positions[j]
+         fprint ("%.10g, ", i)
+      }
+      i = positions[totaldiv-1]
+      fprint ("%.10g;\n", i)
+   }
+
+// ------------------------
+// Voltages vector
+// ------------------------
+
+// The voltagesin algorithm records the present voltages 
+//  at each of the positions monitored.  Simultaneously, 
+//  it checks whether an action potential has occurred in 
+//  each of these positions.  The occurence of an action 
+//  potential is defined as the trans-axolemmal voltage 
+//  rising above then falling below v=thresh.
+// The printvoltages algorithm writes these voltages into 
+//  an opened .dat file.
+
+   proc voltagesin() {
+      j = 0
+      for i = 1, (lastnode-firstnode) {
+         for ii = halfnode, (nodediv-1) {
+            k = firstnode+i-1
+            kk = ii/nodediv
+            voltages[j] = node[k].v(kk)
+            extvoltages[j] = node[k].v(kk)+node[k].vext(kk)
+            if (doneyet[j] == 0) {
+               if (voltages[j] >= thresh) {
+                  doneyet[j] = 1
+               }
+            }
+            if (doneyet[j] == 1) {
+               if (voltages[j] < thresh) {
+                  doneyet[j] = 2
+               }
+            }
+            j = j+1
+         }
+         for ii = 1, (paradiv-1) {
+            k = 2*(firstnode+i-1)
+            kk = ii/paradiv
+            voltages[j] = para[k].v(kk)
+            extvoltages[j] = para[k].v(kk)+para[k].vext(kk)
+            if (doneyet[j] == 0) {
+               if (voltages[j] >= thresh) {
+                  doneyet[j] = 1
+               }
+            }
+            if (doneyet[j] == 1) {
+               if (voltages[j] < thresh) {
+                  doneyet[j] = 2
+               }
+            }
+            j = j+1
+         }
+         for ii = 1, (interdiv-1) {
+            k = firstnode+i-1
+            kk = ii/interdiv
+            voltages[j] = mye[k].v(kk)
+            extvoltages[j] = mye[k].v(kk)+mye[k].vext(kk)
+            if (doneyet[j] == 0) {
+               if (voltages[j] >= thresh) {
+                  doneyet[j] = 1
+               }
+            }
+            if (doneyet[j] == 1) {
+               if (voltages[j] < thresh) {
+                  doneyet[j] = 2
+               }
+            }
+            j = j+1
+         }
+         for ii = 1, (paradiv-1) {
+            k = 2*(firstnode+i-1)+1
+            kk = ii/paradiv
+            voltages[j] = para[k].v(kk)
+            extvoltages[j] = para[k].v(kk)+para[k].vext(kk)
+            if (doneyet[j] == 0) {
+               if (voltages[j] >= thresh) {
+                  doneyet[j] = 1
+               }
+            }
+            if (doneyet[j] == 1) {
+               if (voltages[j] < thresh) {
+                  doneyet[j] = 2
+               }
+            }
+            j = j+1
+         }
+         for ii = 1, (halfnode-1) {
+            k = firstnode+i
+            kk = ii/nodediv
+            voltages[j] = node[k].v(kk)
+            extvoltages[j] = node[k].v(kk)+node[k].vext(kk)
+            if (doneyet[j] == 0) {
+               if (voltages[j] >= thresh) {
+                  doneyet[j] = 1
+               }
+            }
+            if (doneyet[j] == 1) {
+               if (voltages[j] < thresh) {
+                  doneyet[j] = 2
+               }
+            }
+            j = j+1
+         }
+      }
+      k = lastnode
+      kk = halfnode/nodediv
+      voltages[j] = node[k].v(kk)
+      extvoltages[j] = node[k].v(kk)+node[k].vext(kk)
+      if (doneyet[j] == 0) {
+         if (voltages[j] >= thresh) {
+            doneyet[j] = 1
+         }
+      }
+      if (doneyet[j] == 1) {
+         if (voltages[j] < thresh) {
+            doneyet[j] = 2
+         }
+      }
+   }
+
+   proc printvoltages() {
+      for j = 0, (totaldiv-2) {
+         i = extvoltages[j]
+         fprint ("%.10g, ", i)
+      }
+      i = extvoltages[totaldiv-1]
+      fprint ("%.10g;\n", i)
+   }
+
+// ------------------------
+// The EXTVOLTAGE algorithm
+// ------------------------
+
+// This algorithm proceeds as follows.  First the 
+//  vectorsetup algorithm is run to initialize the 
+//  positions, voltages, extvoltages, and doneyet vectors. 
+//  Then a row containing 0 followed by all the monitored 
+//  positions is written into an opened .dat file.  Next 
+//  the simulation proceeds until the first position 
+//  fires. When the first position fires, a row of the 
+//  current time, followed by all the current voltages is 
+//  written into the .dat file.  Now there is loop of 
+//  proceeding one time step and recording the current 
+//  time and voltages.  This loop proceeds until all the 
+//  positions have experienced an action potential.  At 
+//  this point, the algorithm will end.  The algorithm 
+//  also checks whether the first and last positions have 
+//  failed to fire after a long duration.  If that is the 
+//  case, it checks whether the action potential is slow 
+//  and needs more time, or whether it has failed.
+
+// $1=firstnode $2=lastnode
+// Optional inputs:
+// $3=nodediv $4=paradiv $5=interdiv
+
+   proc gogo() {
+      finitialize(-65)
+      stopper = 2
+      apcounter = 0
+      aptimerP2 = 0
+      retrycount = 0
+      if (numarg() == 2) {
+         vectorsetup($1, $2)
+      }
+      if (numarg() == 5) {
+         vectorsetup($1, $2, $3, $4, $5)
+      }
+      fprint ("%.10g, ", 0)
+      positionsin()
+      printpositions()
+      for gogoi = 1, steps {
+         fadvance()
+         if (apcounter <= $2) {
+            apcounterv = node[apcounter].v(0.5)
+            if (apcounterv > thresh) {
+               apcounter = apcounter+1
+               aptimerP1 = aptimerP2
+               aptimerP2 = t
+            }
+         }
+         if (stopper == 2) {
+            nAv = node[$1].v(0.5)
+            if (nAv >= thresh) {
+               apcounter = $1
+               stopper = 1
+            }
+         }
+         if (apcounter >= $1) {
+            gogoi = steps-1
+         }
+         if (stopper == 1) {
+            fprint ("%.10g, ", t)
+            voltagesin()
+            printvoltages()
+            doneyettotal = 0
+            for dycounter = 0, (totaldiv-1) {
+               doneyettotal = doneyettotal+doneyet[dycounter]
+            }
+            if (doneyettotal == 2*totaldiv) {
+               gogoi = steps
+               stopper = 0
+            }
+         }
+         if (gogoi == steps) {
+            if (stopper > 0) {
+               aptimerN = aptimerP2+2*(aptimerP2-aptimerP1)
+               if (t <= aptimerN) {
+                  retrycount = retrycount+1
+                  gogoi = 0.5*steps
+                  print "time = ", t, "   AP position ", apcounter
+                  print "retry attempt ", retrycount
+               }
+               if (t > aptimerN) {
+                  print "time = ", t, "   AP position ", apcounter
+                  print "retry attempts failed"
+                  print "decrease thresh, increase tstop, or increase stim.amp"
+                  double voltages[totaldiv]
+                  fprint ("%.10g, ", 0)
+                  printvoltages()
+                  return
+               }
+            }
+         }
+      }
+      fprint ("\n\n")
+   }

@@ -1,0 +1,51 @@
+// Load base neuron, algorithms
+
+xopen("NEURON_001-130308.hoc")
+xopen("ALG_PARCHA-130523.hoc")
+xopen("ALG_VELOCITY-130308.hoc")
+
+// ----- START EDITS (1 of 2) -----
+
+// Define .dat file for the data
+
+wopen("VELOCITY-141106_myeL_gap_2.dat")
+
+// ----- END EDITS (1 of 2) -----
+
+objref PAR1
+PAR1 = new Vector()
+objref PAR2
+PAR2 = new Vector()
+
+// ----- START EDITS (2 of 2) -----
+
+// State the varying parameter and its values
+// See the ALG_PARCHA algorithm for list of
+//  possible parameters
+
+PAR1name = mye_L
+PAR1.append(1250, 3250, 5250)
+PAR2name = mye_gap
+PAR2.append(0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10)
+
+// ----- END EDITS (2 of 2) -----
+
+PARSIZE1 = PAR1.size()
+PARSIZE2 = PAR2.size()
+RUNTOTAL = PARSIZE1*PARSIZE2
+RUNCOUNTER = 0
+
+for PAR1index = 0, (PARSIZE1-1) {
+   for PAR2index = 0, (PARSIZE2-1) {
+      PAR1value = PAR1.x[PAR1index]
+      PAR2value = PAR2.x[PAR2index]
+      PARCHA(PAR1name, PAR1value)
+      PARCHA(PAR2name, PAR2value)
+      gogo(40, 50)
+      RUNCOUNTER = RUNCOUNTER+1
+      print RUNCOUNTER, "of ", RUNTOTAL, "done"
+   }
+}
+
+wopen()
+print "really done!"
