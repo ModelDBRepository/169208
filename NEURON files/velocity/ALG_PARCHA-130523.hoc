@@ -14,7 +14,7 @@
 // Run this algorithm with PARCHA command:
 //  PARCHA(parameter name, parameter value)
 // E.g. PARCHA(mye_gap, 0.001) changes submyelin gap to
-//  0.001µm then it writes the new parameter value 
+//  0.001Âµm then it writes the new parameter value 
 //  (followed by a comma and space) into the opened .dat
 //  file.
 // Note that when you change a parameter value, if there
